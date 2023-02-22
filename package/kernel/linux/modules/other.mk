@@ -40,6 +40,8 @@ define KernelPackage/bluetooth
 	CONFIG_BT_BNEP \
 	CONFIG_BT_HCIBTUSB \
 	CONFIG_BT_HCIBTUSB_BCM=n \
+	CONFIG_BT_HCIBTUSB_MTK=y \
+	CONFIG_BT_HCIBTUSB_RTL=n \
 	CONFIG_BT_HCIUART \
 	CONFIG_BT_HCIUART_BCM=n \
 	CONFIG_BT_HCIUART_INTEL=n \
@@ -376,23 +378,6 @@ endef
 $(eval $(call KernelPackage,mmc))
 
 
-define KernelPackage/mvsdio
-  SUBMENU:=$(OTHER_MENU)
-  TITLE:=Marvell MMC/SD/SDIO host driver
-  DEPENDS:=+kmod-mmc @TARGET_kirkwood
-  KCONFIG:= CONFIG_MMC_MVSDIO
-  FILES:= \
-	$(LINUX_DIR)/drivers/mmc/host/mvsdio.ko
-  AUTOLOAD:=$(call AutoProbe,mvsdio,1)
-endef
-
-define KernelPackage/mvsdio/description
- Kernel support for the Marvell SDIO host driver.
-endef
-
-$(eval $(call KernelPackage,mvsdio))
-
-
 define KernelPackage/sdhci
   SUBMENU:=$(OTHER_MENU)
   TITLE:=Secure Digital Host Controller Interface support
@@ -421,11 +406,13 @@ define KernelPackage/rfkill
   DEPENDS:=@USE_RFKILL +kmod-input-core
   KCONFIG:= \
     CONFIG_RFKILL_FULL \
+    CONFIG_RFKILL_GPIO=y \
     CONFIG_RFKILL_INPUT=y \
     CONFIG_RFKILL_LEDS=y
   FILES:= \
-    $(LINUX_DIR)/net/rfkill/rfkill.ko
-  AUTOLOAD:=$(call AutoLoad,20,rfkill)
+    $(LINUX_DIR)/net/rfkill/rfkill.ko \
+    $(LINUX_DIR)/net/rfkill/rfkill-gpio.ko
+  AUTOLOAD:=$(call AutoLoad,20,rfkill-gpio)
 endef
 
 define KernelPackage/rfkill/description
@@ -931,6 +918,10 @@ define KernelPackage/zram/config
             bool "lz4"
             select PACKAGE_kmod-lib-lz4
 
+  config ZRAM_DEF_COMP_LZ4HC
+            bool "lz4-hc"
+            select PACKAGE_kmod-lib-lz4hc
+
   config ZRAM_DEF_COMP_ZSTD
             bool "zstd"
             select PACKAGE_kmod-lib-zstd
@@ -1151,8 +1142,8 @@ $(eval $(call KernelPackage,keys-trusted))
 define KernelPackage/tpm
   SUBMENU:=$(OTHER_MENU)
   TITLE:=TPM Hardware Support
-  DEPENDS:= +kmod-random-core +(LINUX_5_15||LINUX_5_19):kmod-asn1-decoder \
-	  +(LINUX_5_15||LINUX_5_19):kmod-asn1-encoder +(LINUX_5_15||LINUX_5_19):kmod-oid-registry
+  DEPENDS:= +kmod-random-core +(LINUX_5_15||LINUX_6_1):kmod-asn1-decoder \
+	  +(LINUX_5_15||LINUX_6_1):kmod-asn1-encoder +(LINUX_5_15||LINUX_6_1):kmod-oid-registry
   KCONFIG:= CONFIG_TCG_TPM
   FILES:= $(LINUX_DIR)/drivers/char/tpm/tpm.ko
   AUTOLOAD:=$(call AutoLoad,10,tpm,1)
@@ -1295,20 +1286,37 @@ endef
 
 $(eval $(call KernelPackage,qcom-qmi-helpers))
 
-define KernelPackage/mhi
+define KernelPackage/mhi-bus
   SUBMENU:=$(OTHER_MENU)
-  TITLE:=Modem Host Interface (MHI) bus
-  DEPENDS:=@LINUX_5_15
+  TITLE:=MHI bus
+  DEPENDS:=@(LINUX_5_15||LINUX_6_1)
   KCONFIG:=CONFIG_MHI_BUS \
-           CONFIG_MHI_BUS_DEBUG=y \
-           CONFIG_MHI_BUS_PCI_GENERIC=n \
-           CONFIG_MHI_NET=n
-  FILES:=$(LINUX_DIR)/drivers/bus/mhi/core/mhi.ko
+           CONFIG_MHI_BUS_DEBUG=y
+  FILES:= \
+	$(LINUX_DIR)/drivers/bus/mhi/core/mhi.ko@lt5.18 \
+	$(LINUX_DIR)/drivers/bus/mhi/host/mhi.ko@ge5.18
   AUTOLOAD:=$(call AutoProbe,mhi)
 endef
 
-define KernelPackage/mhi/description
-  Bus driver for MHI protocol.
+define KernelPackage/mhi-bus/description
+  Kernel module for the Qualcomm MHI bus.
 endef
 
-$(eval $(call KernelPackage,mhi))
+$(eval $(call KernelPackage,mhi-bus))
+
+define KernelPackage/mhi-pci-generic
+  SUBMENU:=$(OTHER_MENU)
+  TITLE:=MHI PCI controller driver
+  DEPENDS:=@(LINUX_5_15||LINUX_6_1) +kmod-mhi-bus
+  KCONFIG:=CONFIG_MHI_BUS_PCI_GENERIC
+  FILES:= \
+	$(LINUX_DIR)/drivers/bus/mhi/mhi_pci_generic.ko@lt5.18 \
+	$(LINUX_DIR)/drivers/bus/mhi/host/mhi_pci_generic.ko@ge5.18
+  AUTOLOAD:=$(call AutoProbe,mhi_pci_generic)
+endef
+
+define KernelPackage/mhi-pci-generic/description
+  Kernel module for the MHI PCI controller driver.
+endef
+
+$(eval $(call KernelPackage,mhi-pci-generic))
